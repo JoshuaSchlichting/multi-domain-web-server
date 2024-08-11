@@ -1,0 +1,11 @@
+[package]
+name = "axum-site"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7.5"
+env_logger = "0.11.5"
+log = "0.4.22"
+tokio = { version = "1.39.2", features = ["full"] }
+tower-http = { version = "0.5.2", features = ["fs"] }
