@@ -155,6 +155,7 @@ dependencies = [
  "env_logger",
  "log",
  "tokio",
+ "tower",
  "tower-http",
 ]
 
