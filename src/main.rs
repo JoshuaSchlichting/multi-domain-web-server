@@ -1,5 +1,6 @@
 use axum::http::Response;
 use axum::{body::Body, http::Request, response::Html, routing::any, Extension, Router};
+use log::trace;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::future::Future;
@@ -9,17 +10,18 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::{Service, ServiceExt};
 use tower_http::services::ServeDir;
-
 struct State {
     api_requests: AtomicUsize,
 }
 
 #[tokio::main]
 async fn main() {
-    run("0.0.0.0", 3000).await;
+    run("0.0.0.0", 80).await;
 }
 
 async fn run(host_ip: &str, port: u16) {
+    env_logger::init();
+
     let api_router = Router::new().route("/", any(api_handler));
     let website_router = Router::new().nest_service("/", ServeDir::new("web/dist"));
 
@@ -38,17 +40,10 @@ async fn run(host_ip: &str, port: u16) {
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", host_ip, port))
         .await
         .unwrap();
-    let server_host = if host_ip == "0.0.0.0" {
-        "localhost".to_string()
-    } else {
-        host_ip.to_string()
-    };
-    println!("Listening on http://{}:{}", server_host, port);
     axum::serve(listener, app).await.unwrap();
 }
 
 async fn api_handler(Extension(state): Extension<Arc<State>>) -> Html<String> {
-    println!("API handler called");
     state.api_requests.fetch_add(1, Ordering::SeqCst);
     Html(format!(
         "api: {}",
@@ -77,6 +72,7 @@ impl MultiDomainRouter {
 
     fn add_router(&mut self, hostname: &str, router: Router) {
         self.mapping.insert(hostname.to_string(), router);
+        println!("Listening on http://{}", hostname);
     }
 }
 
@@ -100,8 +96,7 @@ impl Service<Request<Body>> for MultiDomainRouter {
             .next()
             .unwrap()
             .to_string();
-        println!("Hostname: {}", hostname);
-
+        trace!("{} {} {}", hostname, req.method(), req.uri().path());
         let router = match self.mapping.get(&hostname) {
             Some(router) => router,
             None => {
