@@ -19,6 +19,14 @@ async fn main() {
     run("0.0.0.0", 80).await;
 }
 
+fn acme_handler(req: Request<Body>) -> impl IntoResponse {
+    let challenge_token = req
+        .uri()
+        .path()
+        .trim_start_matches("/.well-known/acme-challenge/");
+    Html(format!("Challenge token: {}", challenge_token));
+}
+
 async fn run(host_ip: &str, port: u16) {
     env_logger::init();
 
@@ -86,6 +94,7 @@ impl Service<Request<Body>> for MultiDomainRouter {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let path = req.uri().path().to_string();
         let hostname = req
             .headers()
             .get("host")
@@ -97,6 +106,10 @@ impl Service<Request<Body>> for MultiDomainRouter {
             .unwrap()
             .to_string();
         trace!("{} {} {}", hostname, req.method(), req.uri().path());
+        if path.starts_with("/.well-known/acme-challenge/") {
+            return Box::pin(async move { Ok(acme_handler(req).into_response()) });
+        }
+
         let router = match self.mapping.get(&hostname) {
             Some(router) => router,
             None => {
