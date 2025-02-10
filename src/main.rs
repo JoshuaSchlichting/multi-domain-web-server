@@ -1,5 +1,6 @@
 #[allow(non_snake_case)]
 mod REGISTER_DOMAINS_HERE;
+mod acme;
 mod domain_register;
 mod multi_domain_router;
 use clap::Parser;
@@ -19,10 +20,17 @@ struct Args {
 async fn run(host_ip: &str, port: u16) {
     let router_service = domain_register::router_with_registered_domains();
 
-    let listener = tokio::net::TcpListener::bind(format!("{}:{}", host_ip, port))
-        .await
-        .unwrap();
-    axum::serve(listener, router_service).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(format!("{}:{}", host_ip, port)).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            eprintln!("Failed to bind to {}:{}. Error: {}", host_ip, port, e);
+            return;
+        }
+    };
+    match axum::serve(listener, router_service).await {
+        Ok(_) => (),
+        Err(e) => eprintln!("Server error: {}", e),
+    }
 }
 
 #[tokio::main]

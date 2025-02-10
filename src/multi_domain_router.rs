@@ -1,3 +1,4 @@
+use crate::acme;
 use axum::{
     body::Body,
     extract::Request,
@@ -21,6 +22,7 @@ fn acme_handler(req: Request<Body>) -> impl IntoResponse {
         .uri()
         .path()
         .trim_start_matches("/.well-known/acme-challenge/");
+    acme::acme_challenge_response(challenge_token);
     Html(format!("Challenge token: {}", challenge_token))
 }
 
@@ -60,16 +62,41 @@ impl Service<Request<Body>> for MultiDomainRouter {
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let path = req.uri().path().to_string();
-        let hostname = req
-            .headers()
-            .get("host")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .split(':')
-            .next()
-            .unwrap()
-            .to_string();
+        let hostname = match req.headers().get("host") {
+            Some(host) => match host.to_str() {
+                Ok(host_str) => match host_str.split(':').next() {
+                    Some(hostname) => hostname.to_string(),
+                    None => {
+                        return Box::pin(async move {
+                            Ok(Response::builder()
+                                .status(400)
+                                .body(Body::from(
+                                    "Bad Request: Invalid Host Header - No hostname found",
+                                ))
+                                .unwrap())
+                        });
+                    }
+                },
+                Err(_) => {
+                    return Box::pin(async move {
+                        Ok(Response::builder()
+                    .status(400)
+                    .body(Body::from("Bad Request: Invalid Host Header - Host header is not a valid string"))
+                    .unwrap())
+                    });
+                }
+            },
+            None => {
+                return Box::pin(async move {
+                    Ok(Response::builder()
+                        .status(400)
+                        .body(Body::from(
+                            "Bad Request: Missing Host Header - Host header is not present",
+                        ))
+                        .unwrap())
+                });
+            }
+        };
         trace!("{} {} {}", hostname, req.method(), req.uri().path());
         const ACME_CHALLENGE: &str = "/.well-known/acme-challenge/";
         if path.starts_with(ACME_CHALLENGE) {
